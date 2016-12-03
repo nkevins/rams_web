@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en" ng-app="monitorApp">
+  <head>
+    <title>RAMS</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="/bower_components/bootstrap/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <style>
+      body {
+        padding-top: 60px;
+      }
+    </style>
+    
+    <script src="/bower_components/jquery/dist/jquery.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/bower_components/bootstrap/dist/js/bootstrap.min.js"></script>
+    <script src="/bower_components/angular/angular.min.js"></script>
+    <script src="/bower_components/ngmap/build/scripts/ng-map.min.js"></script>
+    <script src='//maps.googleapis.com/maps/api/js?sensor=false'></script>
+    <script type="text/javascript">
+      var monitorApp = angular.module('monitorApp', ['ngMap']);
+    
+      monitorApp.factory('socket', ['$rootScope', function ($rootScope) {
+        var socket = io.connect();
+      
+        return {
+          on: function (eventName, callback) {
+            function wrapper() {
+              var args = arguments;
+              $rootScope.$apply(function () {
+                callback.apply(socket, args);
+              });
+            }
+      
+            socket.on(eventName, wrapper);
+      
+            return function () {
+              socket.removeListener(eventName, wrapper);
+            };
+          },
+      
+          emit: function (eventName, data, callback) {
+            socket.emit(eventName, data, function () {
+              var args = arguments;
+              $rootScope.$apply(function () {
+                if(callback) {
+                  callback.apply(socket, args);
+                }
+              });
+            });
+          }
+        };
+      }]);
+    
+      monitorApp.controller('MonitorController', ['$scope', 'socket', 'NgMap', function($scope, socket, NgMap) {
+        NgMap.getMap().then(function(map) {
+          $scope.map = map;
+        });
+  
+        $scope.aircrafts = {};
+        
+        socket.on('init', function(msg){
+          for (var key in msg) {
+            let value = array[key];
+            $scope.aircrafts[key] = value;
+          }
+        });
+        
+        socket.on('update', function(msg){
+          $scope.aircrafts[msg.socketId] = msg;
+        });
+        
+        socket.on('disconnect', function(msg){
+          delete $scope.aircrafts[msg];
+        });
+        
+        $scope.aircraft = null;
+
+        $scope.showDetail = function(e, aircraft) {
+          $scope.aircraft = aircraft;
+          $scope.map.showInfoWindow('foo-iw', aircraft.uid);
+        };
+        
+      }]);
+    </script>
+  </head>
+  <body>
+    <div class="container" ng-controller="MonitorController">
+      <div class="navbar navbar-fixed-top navbar-inverse">
+        <a href="/" class="navbar-brand">RAMS</a>
+      </div>
+      <div class="page-header">
+        <h1>Aircraft Monitor</h1>
+      </div>
+      <div class="row">
+        <div class="col-md-12">
+          <ng-map zoom-to-include-markers="auto" style="display:block; width:auto; height:400px;">
+            <marker ng-repeat="a in aircrafts" id="{{a.uid}}" position="{{a.lat}},{{a.lon}}" title="{{a.callsign}}" on-click="showDetail(a)"></marker>
+            
+            <info-window id="foo-iw">
+              <div ng-non-bindable="">
+                {{aircraft.callsign}}
+              </div>
+            </info-window>
+          </ng-map>
+          <br />
+          <h3>Aircraft List</h3>
+          <div class="panel panel-default" ng-repeat="(key, a) in aircrafts">
+            <div class="panel-heading">
+              <h3 class="panel-title">{{a.callsign}}</h3>
+            </div>
+            <div class="panel-body">
+              Callsign: {{a.callsign}}<br/>
+              IAS: {{a.ias}} kts<br/>
+              Hdg: {{a.hdg | number:0}}<br/>
+              Alt: {{a.alt | number:0}} ft<br/>
+              Lat: {{a.lat | number:4}}<br/>
+              Lon: {{a.lon | number:4}}<br/>
+              Bank: {{a.bank | number:4}}<br/>
+              Pitch: {{a.pitch | number:4}}<br/>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
